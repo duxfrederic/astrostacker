@@ -6,32 +6,54 @@ include("normalization.jl");
 
 
 
-function stackFitsFiles(pathlist, limitmemory, outname, siglow, sighigh,
-                        rejection, 
-                        normalization)
+function stackFitsFiles(pathlist, outname; 
+                        limitmemory=4e9, # default: ~ 4GB memory
+                        combination="average", 
+                        normalization="background",
+                        rejection="winsorizedsigma",
+                        rejlow=1.6, # in units of sigma for the default
+                        rejhigh=1.7,
+                        weighting="backgroundnoise")
 
     # we assume that one file fits in memory.
     # like, were this not the case I'd give up anyways.
+    
 
+    ############### selecting our options ####################
+    # combination:
+    if (combination == "average") | (combination == "mean")
+        combinationFunction = StatsBase.mean
+    elseif combination == "median"
+        combinationFunction = StatsBase.median
+    end
 
-    # select our options:
+    # rejection:
     if rejection == "winsorizedsigma"
         rejectionFunction = winsorizedSigmaClipping;
+    elseif (rejection == "none") | (rejection == "") 
+        rejectionFunction = boringRejectionFunction;
     else 
         throw(error("Unimplemented rejection method"))
     end
-    
-    if normalization == "multiplicativebackground"
+
+    # normalization:
+    if normalization == "background"
         normalizationFunction = backgroundNormalization;
+    elseif (normalization == "none") | (normalization == "")
+        normalizationFunction = boringNormalization;
     else
         throw(error("Unimplemented normalization method"))
     end
 
-    # first compute the normalization to make 
-    # our rejection algorithms meaningfull:
-    normalization = normalizationFunction(pathlist);
+    # weighting
+    if weighting == "backgroundnoise"
+        weightingFunction = weightByBackgroundNoise
+    elseif ((weighting == "none") | (weighting == ""))
+        weightingFunction = boringWeighting
+    else
+        throw(error("Unimplemented weighting method"))
+    end
 
-    
 
     # get the size of the files:
     f = FITS(pathlist[1])[1];
@@ -51,6 +73,20 @@ function stackFitsFiles(pathlist, limitmemory, outname, siglow, sighigh,
     else 
         Nparts = 1;
     end
+
+
+    # so, we'll store some values if needed
+    # (basically if we do any kind of normalization
+    #  and weighting)
+    if ~( ((normalization == "none") | (normalization == ""))
+           & ((rejection == "none") | (rejection == "")) )
+        scales, sigmas = getFilesStats(pathlist);
+    else
+        scales = ones(eltype(f), length(pathlist));
+        sigmas = ones(eltype(f), length(pathlist));
+    end
+
+    
 
     print("Stacking in ")
     print(Nparts)
@@ -74,23 +110,28 @@ function stackFitsFiles(pathlist, limitmemory, outname, siglow, sighigh,
         
         # this is our partial stack:
         stack = zeros(eltype(f), (length(pathlist), stackxsize, sizey));
-        readStackPart!(stack, pathlist, ini, ending, normalization);
+        readStackPart!(stack, pathlist, ini, ending);
 
         # let's reject-average it!
-        mainresult[ini:ending, :] = rejectionMean(stack, rejectionFunction, 
-                                                  siglow, sighigh);
+        mainresult[ini:ending, :] = stackCombine(stack, 
+                                                 combinationFunction,
+                                                 rejectionFunction, 
+                                                 rejlow, rejhigh,
+                                                 normalizationFunction,
+                                                 scales, sigmas,
+                                                 weightingFunction);
     end
+    # write the result to disk.
     FITS(outname, "w") do fout
         write(fout, mainresult);
     end
     
 end
 
-function readStackPart!(stack, pathlist, ini, ending, normalization)
+function readStackPart!(stack, pathlist, ini, ending)
 
     for i = 1:length(pathlist)
-        coeff = 1. / normalization[i];
-        stack[i, :, :] = coeff * read(FITS(pathlist[i])[1], ini:ending, :);
+        stack[i, :, :] = read(FITS(pathlist[i])[1], ini:ending, :);
     end
 
     stack
@@ -98,15 +139,19 @@ end
 
 
 
-function rejectionMean(array, rejectionFunction, siglow, sighigh)
+function stackCombine(array, combineFunction, rejectionFunction, rejlow, rejhigh,
+                                              normalizationFunction, scales, sigmas,
+                                              weightingFunction)
     depth, sizex, sizey = size(array)
     result =  zeros(eltype(array), (sizex, sizey));
 
     @inbounds for j = 1:sizey 
         @inbounds for i = 1:sizex
             column = array[:, i, j];
-            trimmed = rejectionFunction(copy(column), siglow, sighigh);
-            result[i,j] = StatsBase.mean(trimmed);
+            trimmed = rejectionFunction(copy(column), rejlow, rejhigh,
+                                        normalizationFunction, scales, sigmas,
+                                        weightingFunction);
+            result[i,j] = combineFunction(trimmed);
         end
     end
     result

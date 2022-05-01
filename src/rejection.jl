@@ -1,5 +1,7 @@
 import StatsBase
 
+
+
 function winsorize!(x, m0, m1)
     @inbounds for i = 1:length(x)
         if x[i] < m0 
@@ -21,13 +23,21 @@ function sigmaClipping(x, m, sig, siglow, sighigh)
 
 end
 
-function winsorizedSigmaClipping(x, siglow, sighigh)
-    N = length(x);
 
+function boringRejectionFunction(x, siglow, sighigh, normalizationFunction, scales, sigmas, weightingFunction)
+    return x;
+end
+
+function winsorizedSigmaClipping(x, siglow, sighigh, normalizationFunction, scales, sigmas, weightingFunction)
+    N = length(x);
+    # first, normalize the input:
+    xnorm = normalizationFunction(x, scales, sigmas);
+    # but from now on, x will be weighted 
+    x = weightingFunction(x, scales, sigmas);
     while true
-        m = StatsBase.median(x);
-        sig = StatsBase.std(x);
-        tmp = copy(x);
+        m = StatsBase.median(xnorm);
+        sig = StatsBase.std(xnorm);
+        tmp = copy(xnorm);
         while true
             m0 = m - 1.5 * sig; 
             m1 = m + 1.5 * sig; 
@@ -39,20 +49,26 @@ function winsorizedSigmaClipping(x, siglow, sighigh)
         end
 
         clipped = Vector{eltype(x)}();
+        clippednorm = Vector{eltype(x)}();
         n = 0;
         @inbounds for i = 1:N
-            if sigmaClipping(x[i], m, sig, siglow, sighigh)
+            if sigmaClipping(xnorm[i], m, sig, siglow, sighigh)
                 n += 1
             else 
                 push!(clipped, x[i])
+                push!(clippednorm, xnorm[i])
             end
         end
         N = N - n;
-
+        
+        # the x elements are rejected without
+        # being affected by the normalization:
         x = copy(clipped);
+        xnorm = copy(clippednorm);
 
         n > 0 & N > 3 || break
     end 
-
+    # in the end, we return the rejected,
+    # un-normalized version:
     return x
 end

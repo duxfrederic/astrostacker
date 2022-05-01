@@ -3,8 +3,6 @@ if isfile("../Project.toml") && isfile("../Manifest.toml")
     Pkg.activate("../")
 end
 
-include("rejection.jl");
-include("normalization.jl");
 include("stack.jl")
 
 ###########################################################################
@@ -41,6 +39,13 @@ pathlist =
 
 outname = "stack.fits"
 println("starting")
-stackFitsFiles(pathlist, 8e9, "stack.fits", 2, 2, "winsorizedsigma", "multiplicativebackground")
+
+stackFitsFiles(pathlist,  "/tmp/stack2.fits", 
+               combination="average",
+               normalization="background",
+               rejection="winsorizedsigma",
+               rejlow=1.6, # in units of sigma for the default
+               rejhigh=1.7,
+               weighting="none");
 
 ###########################################################################

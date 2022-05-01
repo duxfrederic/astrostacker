@@ -2,22 +2,62 @@ import StatsBase
 using FITSIO
 
 
-function boringNormalization(filepaths)
-   return [1. for f in filepaths]
+function boringNormalization(column, scales, sigmas)
+   return column;
 end
 
-function backgroundNormalization(filepaths)
-    norm = Vector{Float32}();
-    for f in filepaths
-        FITS(f, "r") do fin
-            push!(norm, getBackground(read(fin[1])));
-        end
+function backgroundNormalization(column, scales, sigmas)
+    # somehow works well: normalize
+    # each image by its background value
+    normed = (scales[1] ./ scales) .* column;
+
+    normed
+end
+
+function neutralizeAndScale(column, scales, sigmas)
+    # remove the background, add that of the 
+    # first image,
+    # then scale
+    normed = (scales[1] ./ scales) .* (column .- scales .+ scales[1]);
+
+    normed
+end
+
+function boringWeighting(column, scales, sigmas)
+    # we only scale:
+    return (scales[1] ./ scales) .* column;
+end
+
+function weightByBackgroundNoise(column, scales, sigmas)
+    Z = sum(sigmas.^(-1));
+    weighted = Z^(-1)  .* (column ./ sigmas);
+
+    # scale
+    weighted = (scales[1] ./ scales) .* weighted;
+
+    weighted
+end
+
+
+function getFilesStats(filepaths)
+    f = FITS(filepaths[1]);
+    elt = eltype(f[1]);
+
+    scales = zeros(elt, length(pathlist));
+    sigmas = zeros(elt, length(pathlist));
+
+    for i in 1:length(filepaths)
+        fin = FITS(filepaths[i], "r");
+        m, s = getBackgroundStats(read(fin[1]));
+        scales[i] = m;
+        sigmas[i] = s;
     end
 
-    norm ./ StatsBase.minimum(norm);
+    [scales, sigmas]
 end
 
-function getBackground(array, ns=1.)
+function getBackgroundStats(array, ns=1.)
+    # used to estimate scales and weights.
     clmp = copy(array);
     while true 
         m = StatsBase.median(clmp);
@@ -26,6 +66,5 @@ function getBackground(array, ns=1.)
         m1 = StatsBase.median(clmp);
         abs(m1 - m)/m > 0.05 || break
     end
-
-    StatsBase.median(clmp);
+    [StatsBase.median(clmp), StatsBase.std(clmp)];
 end
