@@ -1,5 +1,5 @@
 using FITSIO
-import StatsBase
+import NaNStatistics
 
 include("rejection.jl");
 include("normalization.jl");
@@ -22,9 +22,9 @@ function stackFitsFiles(pathlist, outname;
     ############### selecting our options ####################
     # combination:
     if (combination == "average") | (combination == "mean")
-        combinationFunction = StatsBase.mean
+        combinationFunction = NaNStatistics.nanmean
     elseif combination == "median"
-        combinationFunction = StatsBase.median
+        combinationFunction = NaNStatistics.nanmedian
     end
 
     # rejection:

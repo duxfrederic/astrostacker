@@ -1,4 +1,4 @@
-import StatsBase
+import NaNStatistics
 
 
 
@@ -35,16 +35,16 @@ function winsorizedSigmaClipping(x, siglow, sighigh, normalizationFunction, scal
     # but from now on, x will be weighted 
     x = weightingFunction(x, scales, sigmas);
     while true
-        m = StatsBase.median(xnorm);
-        sig = StatsBase.std(xnorm);
+        m = NaNStatistics.nanmedian(xnorm);
+        sig = NaNStatistics.nanstd(xnorm);
         tmp = copy(xnorm);
         while true
             m0 = m - 1.5 * sig; 
             m1 = m + 1.5 * sig; 
             winsorize!(tmp, m0, m1);
-            m = StatsBase.median(tmp); 
+            m = NaNStatistics.nanmedian(tmp); 
             sig0 = sig; 
-            sig = 1.134 * StatsBase.std(tmp)
+            sig = 1.134 * NaNStatistics.nanstd(tmp)
             abs(sig-sig0) / sig0 > 0.0005 || break
         end
 

@@ -1,4 +1,4 @@
-import StatsBase
+import NaNStatistics
 using FITSIO
 
 
@@ -60,11 +60,11 @@ function getBackgroundStats(array, ns=1.)
     # used to estimate scales and weights.
     clmp = copy(array);
     while true 
-        m = StatsBase.median(clmp);
-        s = StatsBase.std(clmp);
+        m = NaNStatistics.nanmedian(clmp);
+        s = NaNStatistics.nanstd(clmp);
         clamp!(clmp, m - ns*s, m + ns*s)
-        m1 = StatsBase.median(clmp);
+        m1 = NaNStatistics.nanmedian(clmp);
         abs(m1 - m)/m > 0.05 || break
     end
-    [StatsBase.median(clmp), StatsBase.std(clmp)];
+    [NaNStatistics.nanmedian(clmp), NaNStatistics.nanstd(clmp)];
 end
