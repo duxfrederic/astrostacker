@@ -43,8 +43,8 @@ function getFilesStats(filepaths)
     f = FITS(filepaths[1]);
     elt = eltype(f[1]);
 
-    scales = zeros(elt, length(pathlist));
-    sigmas = zeros(elt, length(pathlist));
+    scales = zeros(elt, length(filepaths));
+    sigmas = zeros(elt, length(filepaths));
 
     for i in 1:length(filepaths)
         fin = FITS(filepaths[i], "r");
